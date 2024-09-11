@@ -4,13 +4,13 @@ let wasmInterface;
 let context;
 let wasmPcmInput;
 let wasmPcmInputF32Index;
-async function transform(encodedFrame, controller) {
-    const buffer = new Float32Array(encodedFrame.numberOfFrames * encodedFrame.numberOfChannels);
-    for (let channel = 0; channel < encodedFrame.numberOfChannels; channel++) {
-      const offset = encodedFrame.numberOfFrames * channel;
-      const samples = buffer.subarray(offset, offset + encodedFrame.numberOfFrames);
-      encodedFrame.copyTo(samples, {planeIndex: channel, format: 'f32-planar'});
-      for (let i = 0; i < encodedFrame.numberOfFrames; i++) {
+async function transform(data, controller) {
+    const buffer = new Float32Array(data.numberOfFrames * data.numberOfChannels);
+    for (let channel = 0; channel < data.numberOfChannels; channel++) {
+      const offset = data.numberOfFrames * channel;
+      const samples = buffer.subarray(offset, offset + data.numberOfFrames);
+      data.copyTo(samples, {planeIndex: channel, format: 'f32-planar'});
+      for (let i = 0; i < data.numberOfFrames; i++) {
         wasmInterface.HEAPF32[wasmPcmInputF32Index + i] = samples[i] * 32768;
       }
       const res = wasmInterface._rnnoise_process_frame(
@@ -18,12 +18,18 @@ async function transform(encodedFrame, controller) {
         wasmPcmInput,
         wasmPcmInput
       );
-      for (let i = 0; i < encodedFrame.numberOfFrames; i++) {
+      for (let i = 0; i < data.numberOfFrames; i++) {
         samples[i] = wasmInterface.HEAPF32[wasmPcmInputF32Index + i] / 32768;
       }
     }
-    encodedFrame.data = buffer;
-    controller.enqueue(encodedFrame);
+    controller.enqueue(new AudioData({
+      format: 'f32-planar',
+      sampleRate: data.sampleRate,
+      numberOfFrames: data.numberOfFrames,
+      numberOfChannels: data.numberOfChannels,
+      timestamp: data.timestamp,
+      data: buffer
+    }));
 }
 
 onmessage = async (event) => {
